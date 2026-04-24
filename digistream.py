@@ -3,22 +3,37 @@ import pandas as pd
 import pyodbc
 
 # Load configuration from Streamlit secrets
-SERVER = st.secrets["database"].get("server", "WPVSQLFARMAGL01")
-DATABASE = st.secrets["database"].get("database", "AFPE")
-SCHEMA_NAME = st.secrets["database"].get("schema_name", "digitization")
-TABLE_NAME = st.secrets["database"].get("table_name", "metadata_catalog")
+DB_CFG = st.secrets.get("database", {})
+SERVER = DB_CFG.get("server", "WPVSQLFARMAGL01")
+DATABASE = DB_CFG.get("database", "AFPE")
+SCHEMA_NAME = DB_CFG.get("schema_name", "digitization")
+TABLE_NAME = DB_CFG.get("table_name", "metadata_catalog")
+AUTH_MODE = DB_CFG.get("auth_mode", "sql").lower()
+DB_USER = DB_CFG.get("username", "")
+DB_PASSWORD = DB_CFG.get("password", "")
+ODBC_DRIVER = DB_CFG.get("driver", "ODBC Driver 18 for SQL Server")
 
 st.set_page_config(page_title="Metadata Catalog Viewer", layout="wide")
 st.title("Digitization Metadata Catalog Viewer")
 
 @st.cache_resource
 def get_connection():
-    conn = pyodbc.connect(
-        f"DRIVER={{ODBC Driver 17 for SQL Server}};"
-        f"SERVER={SERVER};"
-        f"DATABASE={DATABASE};"
-        f"Trusted_Connection=yes;"
-    )
+    conn_parts = [
+        f"DRIVER={{{ODBC_DRIVER}}}",
+        f"SERVER={SERVER}",
+        f"DATABASE={DATABASE}",
+        "Encrypt=yes",
+        "TrustServerCertificate=yes",
+        "Connection Timeout=15",
+    ]
+
+    if AUTH_MODE == "windows":
+        conn_parts.append("Trusted_Connection=yes")
+    else:
+        conn_parts.append(f"UID={DB_USER}")
+        conn_parts.append(f"PWD={DB_PASSWORD}")
+
+    conn = pyodbc.connect(";".join(conn_parts) + ";")
     return conn
 
 @st.cache_data
@@ -31,7 +46,15 @@ def load_data():
     df = pd.read_sql(query, conn)
     return df
 
-df = load_data()
+try:
+    df = load_data()
+except pyodbc.Error as exc:
+    st.error("Database connection failed from Streamlit Cloud.")
+    st.info(
+        "Set SQL credentials in app Secrets and confirm Purdue network/firewall allows access from Streamlit Cloud."
+    )
+    st.code(str(exc))
+    st.stop()
 
 st.write(f"Showing data from `{DATABASE}.{SCHEMA_NAME}.{TABLE_NAME}`")
 st.dataframe(df, use_container_width=True)
