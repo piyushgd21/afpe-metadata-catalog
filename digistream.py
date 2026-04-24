@@ -11,7 +11,8 @@ TABLE_NAME = DB_CFG.get("table_name", "metadata_catalog")
 AUTH_MODE = DB_CFG.get("auth_mode", "sql").lower()
 DB_USER = DB_CFG.get("username", "")
 DB_PASSWORD = DB_CFG.get("password", "")
-ODBC_DRIVER = DB_CFG.get("driver", "ODBC Driver 18 for SQL Server")
+ODBC_DRIVER = DB_CFG.get("driver", "FreeTDS")
+DB_PORT = DB_CFG.get("port", "1433")
 
 st.set_page_config(page_title="Metadata Catalog Viewer", layout="wide")
 st.title("Digitization Metadata Catalog Viewer")
@@ -21,7 +22,9 @@ def get_connection():
     installed_drivers = pyodbc.drivers()
     chosen_driver = ODBC_DRIVER
     if ODBC_DRIVER not in installed_drivers:
-        if "ODBC Driver 18 for SQL Server" in installed_drivers:
+        if "FreeTDS" in installed_drivers:
+            chosen_driver = "FreeTDS"
+        elif "ODBC Driver 18 for SQL Server" in installed_drivers:
             chosen_driver = "ODBC Driver 18 for SQL Server"
         elif "ODBC Driver 17 for SQL Server" in installed_drivers:
             chosen_driver = "ODBC Driver 17 for SQL Server"
@@ -32,10 +35,15 @@ def get_connection():
         f"DRIVER={{{chosen_driver}}}",
         f"SERVER={SERVER}",
         f"DATABASE={DATABASE}",
-        "Encrypt=yes",
-        "TrustServerCertificate=yes",
         "Connection Timeout=15",
     ]
+
+    if "freetds" in chosen_driver.lower():
+        conn_parts.append(f"PORT={DB_PORT}")
+        conn_parts.append("TDS_Version=8.0")
+    else:
+        conn_parts.append("Encrypt=yes")
+        conn_parts.append("TrustServerCertificate=yes")
 
     if AUTH_MODE == "windows":
         conn_parts.append("Trusted_Connection=yes")

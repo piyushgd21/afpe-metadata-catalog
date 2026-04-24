@@ -1,3 +1,5 @@
 unixodbc
 unixodbc-dev
-msodbcsql18
+tdsodbc
+freetds-bin
+freetds-dev
