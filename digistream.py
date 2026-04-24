@@ -18,8 +18,18 @@ st.title("Digitization Metadata Catalog Viewer")
 
 @st.cache_resource
 def get_connection():
+    installed_drivers = pyodbc.drivers()
+    chosen_driver = ODBC_DRIVER
+    if ODBC_DRIVER not in installed_drivers:
+        if "ODBC Driver 18 for SQL Server" in installed_drivers:
+            chosen_driver = "ODBC Driver 18 for SQL Server"
+        elif "ODBC Driver 17 for SQL Server" in installed_drivers:
+            chosen_driver = "ODBC Driver 17 for SQL Server"
+        elif installed_drivers:
+            chosen_driver = installed_drivers[-1]
+
     conn_parts = [
-        f"DRIVER={{{ODBC_DRIVER}}}",
+        f"DRIVER={{{chosen_driver}}}",
         f"SERVER={SERVER}",
         f"DATABASE={DATABASE}",
         "Encrypt=yes",
@@ -53,6 +63,7 @@ except pyodbc.Error as exc:
     st.info(
         "Set SQL credentials in app Secrets and confirm Purdue network/firewall allows access from Streamlit Cloud."
     )
+    st.caption(f"Installed ODBC drivers in container: {pyodbc.drivers()}")
     st.code(str(exc))
     st.stop()
 
