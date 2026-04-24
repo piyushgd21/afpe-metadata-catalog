@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import pyodbc
+import pytds
 
 # Load configuration from Streamlit secrets
 DB_CFG = st.secrets.get("database", {})
@@ -11,7 +11,6 @@ TABLE_NAME = DB_CFG.get("table_name", "metadata_catalog")
 AUTH_MODE = DB_CFG.get("auth_mode", "sql").lower()
 DB_USER = DB_CFG.get("username", "")
 DB_PASSWORD = DB_CFG.get("password", "")
-ODBC_DRIVER = DB_CFG.get("driver", "FreeTDS")
 DB_PORT = DB_CFG.get("port", "1433")
 
 st.set_page_config(page_title="Metadata Catalog Viewer", layout="wide")
@@ -19,39 +18,20 @@ st.title("Digitization Metadata Catalog Viewer")
 
 @st.cache_resource
 def get_connection():
-    installed_drivers = pyodbc.drivers()
-    chosen_driver = ODBC_DRIVER
-    if ODBC_DRIVER not in installed_drivers:
-        if "FreeTDS" in installed_drivers:
-            chosen_driver = "FreeTDS"
-        elif "ODBC Driver 18 for SQL Server" in installed_drivers:
-            chosen_driver = "ODBC Driver 18 for SQL Server"
-        elif "ODBC Driver 17 for SQL Server" in installed_drivers:
-            chosen_driver = "ODBC Driver 17 for SQL Server"
-        elif installed_drivers:
-            chosen_driver = installed_drivers[-1]
-
-    conn_parts = [
-        f"DRIVER={{{chosen_driver}}}",
-        f"SERVER={SERVER}",
-        f"DATABASE={DATABASE}",
-        "Connection Timeout=15",
-    ]
-
-    if "freetds" in chosen_driver.lower():
-        conn_parts.append(f"PORT={DB_PORT}")
-        conn_parts.append("TDS_Version=8.0")
-    else:
-        conn_parts.append("Encrypt=yes")
-        conn_parts.append("TrustServerCertificate=yes")
-
     if AUTH_MODE == "windows":
-        conn_parts.append("Trusted_Connection=yes")
-    else:
-        conn_parts.append(f"UID={DB_USER}")
-        conn_parts.append(f"PWD={DB_PASSWORD}")
+        raise RuntimeError(
+            "Windows auth is not supported on Streamlit Cloud. Use SQL username/password in Secrets."
+        )
 
-    conn = pyodbc.connect(";".join(conn_parts) + ";")
+    conn = pytds.connect(
+        server=SERVER,
+        database=DATABASE,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        port=int(DB_PORT),
+        login_timeout=15,
+        timeout=30,
+    )
     return conn
 
 @st.cache_data
@@ -66,12 +46,11 @@ def load_data():
 
 try:
     df = load_data()
-except pyodbc.Error as exc:
+except Exception as exc:
     st.error("Database connection failed from Streamlit Cloud.")
     st.info(
-        "Set SQL credentials in app Secrets and confirm Purdue network/firewall allows access from Streamlit Cloud."
+        "Set SQL credentials in app Secrets and confirm Purdue network/firewall allows access from Streamlit Cloud on port 1433."
     )
-    st.caption(f"Installed ODBC drivers in container: {pyodbc.drivers()}")
     st.code(str(exc))
     st.stop()
 
